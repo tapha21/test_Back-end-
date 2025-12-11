@@ -1,10 +1,10 @@
 <?php
 namespace App\Controller;
-
 use App\Entity\Tache;
 use App\Entity\Utilisateur;
 use App\Enum\StatutTache;
 use Doctrine\ORM\EntityManagerInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -27,13 +27,18 @@ class TacheController extends AbstractController
     public function index(): JsonResponse
     {
         $taches = $this->em->getRepository(Tache::class)->findAll();
-        $data = array_map(fn(Tache $t) => [
-            "id"=>$t->getId(),
-            "titre"=>$t->getTitre(),
-            "description"=>$t->getDescription(),
-            "statut"=>$t->getStatut(),
-            "utilisateur"=>$t->getUtilisateur()->getEmail()
+            $data = array_map(fn(Tache $t) => [
+            "id" => $t->getId(),
+            "titre" => $t->getTitre(),
+            "description" => $t->getDescription(),
+            "statut" => $t->getStatut(),
+            "utilisateur" => [
+                "email" => $t->getUtilisateur()->getEmail(),
+                "nom" => $t->getUtilisateur()->getNom(),
+                "prenom" => $t->getUtilisateur()->getPrenom()
+            ]
         ], $taches);
+
         return $this->json($data);
     }
 
@@ -56,36 +61,74 @@ class TacheController extends AbstractController
  *     @OA\Response(response=404, description="Utilisateur introuvable")
  * )
  */
-    #[Route('/api/taches/ajouter', name: 'tache_ajouter', methods: ['POST'])]
-    public function ajouterTache(Request $request): JsonResponse
-    {
-        $data = json_decode($request->getContent(), true);
+#[Route('/ajouter', methods: ['POST'])]
+public function ajouter(Request $request, EntityManagerInterface $em, LoggerInterface $logger): JsonResponse
+{
+    try {
+        // --- Récupération des données JSON ---
+        $data = json_decode($request->getContent(), true) ?: [];
 
         $titre = $data['titre'] ?? null;
-        $description = $data['description'] ?? null;
-        $statut = $data['statut'] ?? StatutTache::A_FAIRE->name;
+        $description = $data['description'] ?? '';
+        $statut = $data['statut'] ?? 'A_FAIRE';
         $emailUser = $data['emailUser'] ?? null;
+        $fichiersBase64 = $data['fichiers'] ?? []; // tableau de strings base64
 
-        if (!$titre || !$description || !$emailUser) {
-            return $this->json(['error' => 'Champs obligatoires manquants'], 400);
+        $logger->info('Données reçues pour ajouter une tâche', [
+            'titre' => $titre,
+            'description' => $description,
+            'statut' => $statut,
+            'emailUser' => $emailUser,
+            'nbFichiers' => count($fichiersBase64)
+        ]);
+
+        if (!$titre) {
+            return $this->json(['success' => false, 'error' => 'Le titre est requis'], 400);
         }
 
-        $utilisateur = $this->em->getRepository(Utilisateur::class)->findOneBy(['email' => $emailUser]);
+        if (!$emailUser) {
+            return $this->json(['success' => false, 'error' => 'Email de l’utilisateur requis'], 400);
+        }
+
+        // --- Récupération de l'utilisateur ---
+        $utilisateur = $em->getRepository(Utilisateur::class)->findOneBy(['email' => $emailUser]);
         if (!$utilisateur) {
-            return $this->json(['error' => 'Utilisateur introuvable'], 404);
+            return $this->json(['success' => false, 'error' => 'Utilisateur introuvable'], 404);
         }
 
+        // --- Création de la tâche ---
         $tache = new Tache();
         $tache->setTitre($titre)
               ->setDescription($description)
-              ->setStatut(StatutTache::from($statut))
+              ->setStatut(\App\Enum\StatutTache::from($statut))
               ->setUtilisateur($utilisateur);
 
-        $this->em->persist($tache);
-        $this->em->flush();
+        // --- Stockage des fichiers base64 (facultatif) ---
+        // Tu peux directement stocker les chaînes base64 dans la colonne JSON
+        $tache->setFichiers($fichiersBase64);
 
-        return $this->json(['success' => 'Tâche créée', 'id' => $tache->getId()]);
+        $em->persist($tache);
+        $em->flush();
+
+        return $this->json([
+            'success' => true,
+            'id' => $tache->getId(),
+            'fichiers' => $tache->getFichiers()
+        ], 201);
+
+    } catch (\Exception $e) {
+        $logger->error('Erreur lors de l\'ajout de la tâche', ['exception' => $e]);
+        return $this->json(['success' => false, 'error' => $e->getMessage()], 400);
     }
+}
+
+
+
+
+
+
+
+
 
 
 
@@ -105,13 +148,18 @@ class TacheController extends AbstractController
         if(!$tache){
             return $this->json(['error'=>'Tâche non trouvée'],404);
         }
-        return $this->json([
-            "id"=>$tache->getId(),
-            "titre"=>$tache->getTitre(),
-            "description"=>$tache->getDescription(),
-            "statut"=>$tache->getStatut(),
-            "utilisateur"=>$tache->getUtilisateur()->getEmail()
+       return $this->json([
+            "id" => $tache->getId(),
+            "titre" => $tache->getTitre(),
+            "description" => $tache->getDescription(),
+            "statut" => $tache->getStatut(),
+            "utilisateur" => [
+                "email" => $tache->getUtilisateur()->getEmail(),
+                "nom" => $tache->getUtilisateur()->getNom(),
+                "prenom" => $tache->getUtilisateur()->getPrenom()
+            ]
         ]);
+
     }
 
     /**
@@ -134,4 +182,38 @@ class TacheController extends AbstractController
         $this->em->flush();
         return $this->json(['success'=>'Tâche supprimée']);
     }
+    #[Route('/update/{id}', name: 'tache_update', methods: ['PUT'])]
+public function update(Request $request, int $id, EntityManagerInterface $em): JsonResponse
+{
+    try {
+        $tache = $em->getRepository(Tache::class)->find($id);
+        if (!$tache) {
+            return $this->json(['success' => false, 'error' => 'Tâche non trouvée'], 404);
+        }
+
+        $data = json_decode($request->getContent(), true) ?: [];
+        $statut = $data['statut'] ?? null;
+        
+        if (!$statut || !in_array($statut, ['A_FAIRE', 'EN_COURS', 'FAIT'])) {
+            return $this->json(['success' => false, 'error' => 'Statut invalide'], 400);
+        }
+
+        $tache->setStatut(\App\Enum\StatutTache::from($statut));
+        
+        $em->flush();
+
+        return $this->json([
+            'success' => true,
+            'id' => $tache->getId(),
+            'statut' => $tache->getStatut()->value
+        ]);
+
+    } catch (\Exception $e) {
+        return $this->json([
+            'success' => false,
+            'error' => $e->getMessage()
+        ], 400);
+    }
+}
+
 }

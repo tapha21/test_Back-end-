@@ -1,6 +1,5 @@
 <?php
 
-
 namespace App\Entity;
 
 use Doctrine\ORM\Mapping as ORM;
@@ -24,64 +23,36 @@ class Utilisateur implements UserInterface, PasswordAuthenticatedUserInterface
     #[ORM\Column(type:"string")]
     private string $motDePasse;
 
+    #[ORM\Column(type:"string", length:100)]
+    private string $nom;
+
+    #[ORM\Column(type:"string", length:100)]
+    private string $prenom;
+
     // --- Getters / Setters ---
 
-    public function getId(): ?int
-    {
-        return $this->id;
-    }
+    public function getId(): ?int { return $this->id; }
+    public function getEmail(): string { return $this->email; }
+    public function setEmail(string $email): self { $this->email = $email; return $this; }
 
-    public function getEmail(): string
-    {
-        return $this->email;
-    }
+    public function getNom(): string { return $this->nom; }
+    public function setNom(string $nom): self { $this->nom = $nom; return $this; }
 
-    public function setEmail(string $email): self
-    {
-        $this->email = $email;
-        return $this;
-    }
+    public function getPrenom(): string { return $this->prenom; }
+    public function setPrenom(string $prenom): self { $this->prenom = $prenom; return $this; }
 
-    public function getRoles(): array
-    {
-        // garantit qu'un utilisateur a au moins ROLE_USER
+    public function getRoles(): array {
         $roles = $this->roles;
-        if (empty($roles)) {
-            $roles[] = RoleUtilisateur::USER->value;
-        }
+        if(empty($roles)) $roles[] = 'ROLE_USER';
         return array_unique($roles);
     }
+    public function setRoles(array $roles): self { $this->roles = $roles; return $this; }
 
-    public function setRoles(array $roles): self
-    {
-        $this->roles = $roles;
-        return $this;
-    }
+    public function getPassword(): string { return $this->motDePasse; }
+    public function setMotDePasse(string $motDePasse): self { $this->motDePasse = $motDePasse; return $this; }
 
-    public function getPassword(): string
-    {
-        return $this->motDePasse;
-    }
-
-    public function setMotDePasse(string $motDePasse): self
-    {
-        $this->motDePasse = $motDePasse;
-        return $this;
-    }
-
-    // --- Méthodes UserInterface  ---
-
-    public function getUserIdentifier(): string
-    {
-        return $this->email;
-    }
-
-    public function getSalt(): ?string
-    {
-        return null;
-    }
-
-    public function eraseCredentials(): void
-    {
-    }
+    // --- UserInterface ---
+    public function getUserIdentifier(): string { return $this->email; }
+    public function getSalt(): ?string { return null; }
+    public function eraseCredentials(): void {}
 }

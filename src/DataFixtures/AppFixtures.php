@@ -17,16 +17,21 @@ public function load(ObjectManager $manager): void
         $statuts = array_column(StatutTache::cases(), 'value');
 
         $admin = new Utilisateur();
-        $admin->setEmail('admin@tapha.sn')
-              ->setMotDePasse($this->hasher->hashPassword($admin, '123'))
-              ->setRoles(['ROLE_ADMIN']);
-        $manager->persist($admin);
+$admin->setEmail('admin@tapha.sn')
+      ->setMotDePasse($this->hasher->hashPassword($admin, '123'))
+      ->setRoles(['ROLE_ADMIN'])
+      ->setNom('Admin')
+      ->setPrenom('Super');
+$manager->persist($admin);
 
-        $user = new Utilisateur();
-        $user->setEmail('user1@tapha.sn')
-             ->setMotDePasse($this->hasher->hashPassword($user, '123'))
-             ->setRoles(['ROLE_USER']);
-        $manager->persist($user);
+$user = new Utilisateur();
+$user->setEmail('user1@tapha.sn')
+     ->setMotDePasse($this->hasher->hashPassword($user, '123'))
+     ->setRoles(['ROLE_USER'])
+     ->setNom('User')
+     ->setPrenom('Demo');
+$manager->persist($user);
+
 
         for ($i = 1; $i <= 6; $i++) {
         $tache = new Tache();

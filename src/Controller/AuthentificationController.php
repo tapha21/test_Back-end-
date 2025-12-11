@@ -15,8 +15,14 @@ use OpenApi\Annotations as OA;
 #[Route('/api')]
 class AuthentificationController extends AbstractController
 {
-    public function __construct(private EntityManagerInterface $em) {}
+ private EntityManagerInterface $em;
+    private UserPasswordHasherInterface $passwordHasher;
 
+    public function __construct(EntityManagerInterface $em, UserPasswordHasherInterface $passwordHasher)
+    {
+        $this->em = $em;
+        $this->passwordHasher = $passwordHasher;
+    }
     /**
      * @OA\Post(
      *     path="/api/inscription",
@@ -34,26 +40,37 @@ class AuthentificationController extends AbstractController
      *     @OA\Response(response=400, description="Champs obligatoires manquants")
      * )
      */
-    #[Route('/inscription', name:'api_inscription', methods:['POST'])]
-    public function inscription(Request $request, UserPasswordHasherInterface $hasher): JsonResponse
+ #[Route('/inscription', methods: ['POST'])]
+    public function inscription(Request $request): JsonResponse
     {
-        $data = json_decode($request->getContent(), true);
+        $data = json_decode($request->getContent(), true) ?: [];
+        $nom = $data['nom'] ?? null;
+        $prenom = $data['prenom'] ?? null;
+        $email = $data['email'] ?? null;
+        $password = $data['password'] ?? null;
 
-        if (!isset($data['email']) || !isset($data['password'])) {
-            return $this->json(['error'=>'Email et mot de passe obligatoires'], 400);
+        if (!$nom || !$prenom || !$email || !$password) {
+            return $this->json(['success' => false, 'error' => 'Tous les champs sont obligatoires'], 400);
+        }
+
+        // Vérifier si l’email existe déjà
+        $existing = $this->em->getRepository(Utilisateur::class)->findOneBy(['email' => $email]);
+        if ($existing) {
+            return $this->json(['success' => false, 'error' => 'Email déjà utilisé'], 400);
         }
 
         $user = new Utilisateur();
-        $user->setEmail($data['email']);
-        $user->setMotDePasse($hasher->hashPassword($user, $data['password']));
-        $user->addRole(RoleUtilisateur::USER);
+        $user->setNom($nom)
+             ->setPrenom($prenom)
+             ->setEmail($email)
+             ->setRoles(['ROLE_USER'])
+             ->setMotDePasse($this->passwordHasher->hashPassword($user, $password));
 
         $this->em->persist($user);
         $this->em->flush();
 
-        return $this->json(['message'=>'Utilisateur créé']);
+        return $this->json(['success' => true, 'id' => $user->getId()]);
     }
-
     /**
      * @OA\Post(
      *     path="/api/connexion",
