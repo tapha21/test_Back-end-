@@ -1,25 +1,50 @@
-# Utiliser PHP 8.2
-FROM php:8.2-cli
+# Utiliser l'image PHP officielle avec Apache ou CLI
+FROM php:8.2-fpm
 
-WORKDIR /app
+# Arguments pour composer
+ARG COMPOSER_ALLOW_SUPERUSER=1
 
-# Dépendances système
+# Installer les dépendances système
 RUN apt-get update && apt-get install -y \
-    git unzip libicu-dev libxml2-dev libzip-dev zip libpng-dev libonig-dev \
-    && docker-php-ext-install intl pdo pdo_mysql zip opcache
-
-# Copier le projet
-COPY . .
+    git \
+    unzip \
+    zip \
+    libicu-dev \
+    libonig-dev \
+    libxml2-dev \
+    libzip-dev \
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
+    && docker-php-ext-install intl pdo_mysql mbstring xml zip opcache gd \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Installer Composer
-RUN php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" \
-    && php composer-setup.php --install-dir=/usr/local/bin --filename=composer
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Installer les dépendances
-RUN composer install --no-dev --optimize-autoloader
+# Définir le répertoire de travail
+WORKDIR /app
 
-# Exposer le port attendu par Render (par ex 10000)
-EXPOSE 10000
+# Copier les fichiers composer
+COPY composer.json composer.lock ./
 
-# Lancer Symfony en mode prod
-CMD ["php", "-S", "0.0.0.0:10000", "-t", "public"]
+# Installer les dépendances sans dev pour la prod
+RUN composer install --no-dev --optimize-autoloader --prefer-dist
+
+# Copier le reste de l'application
+COPY . .
+
+# Configurer les permissions pour Symfony (var et cache)
+RUN mkdir -p var/cache var/log var/sessions \
+    && chown -R www-data:www-data var \
+    && chmod -R 775 var
+
+# Construire le cache Symfony pour la production
+RUN php bin/console cache:clear --env=prod --no-warmup \
+    && php bin/console cache:warmup --env=prod
+
+# Exposer le port pour le serveur web (à adapter si Apache/Nginx externe)
+EXPOSE 9000
+
+# Commande par défaut pour FPM
+CMD ["php-fpm"]
