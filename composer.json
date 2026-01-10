@@ -9,7 +9,7 @@
         "ext-iconv": "*",
         "doctrine/annotations": "^2.0",
         "doctrine/doctrine-bundle": "^2.18",
-        "doctrine/doctrine-migrations-bundle": "*",
+        "doctrine/doctrine-migrations-bundle": "^3.7",
         "doctrine/orm": "^3.5",
         "nelmio/api-doc-bundle": "*",
         "nelmio/cors-bundle": "*",
