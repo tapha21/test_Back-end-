@@ -1,5 +1,5 @@
 # ============================
-# Dockerfile Symfony + PostgreSQL
+# Symfony + PostgreSQL pour Render
 # ============================
 
 FROM php:8.2-cli
@@ -8,7 +8,7 @@ FROM php:8.2-cli
 RUN apt-get update && apt-get install -y \
     git unzip zip libicu-dev libonig-dev libxml2-dev libzip-dev \
     libpng-dev libjpeg-dev libfreetype6-dev \
-    libpq-dev \
+    libpq-dev postgresql-client \
     && docker-php-ext-install intl pdo_pgsql pgsql mbstring xml zip opcache gd \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -21,22 +21,18 @@ WORKDIR /app
 # Copier le projet
 COPY . .
 
-# Supprimer cache et vendor (propre pour build)
+# Supprimer cache et vendor (build propre)
 RUN rm -rf var/cache/* vendor/*
 
-# Installer les dépendances Symfony
+# Installer les dépendances Symfony (prod seulement)
 RUN composer install --no-dev --optimize-autoloader --prefer-dist --no-scripts
 
-# Clear & warmup cache prod
-RUN php bin/console cache:clear --env=prod --no-warmup \
- && php bin/console cache:warmup --env=prod
+# Copier le script d'entrypoint
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-# 🔥 Migrations + Fixtures automatique
-RUN php bin/console doctrine:migrations:migrate --no-interaction --env=prod \
- && php bin/console doctrine:fixtures:load --no-interaction --env=prod --append
-
-# Exposer le port
+# Exposer le port 8000 pour Render
 EXPOSE 8000
 
-# Lancer le serveur PHP
-CMD ["php", "-S", "0.0.0.0:8000", "-t", "public"]
+# Lancer le script au démarrage
+CMD ["/entrypoint.sh"]
